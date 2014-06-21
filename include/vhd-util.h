@@ -31,5 +31,6 @@ int vhd_util_modify(int argc, char **argv);
 int vhd_util_scan(int argc, char **argv);
 int vhd_util_check(int argc, char **argv);
 int vhd_util_revert(int argc, char **argv);
+int vhd_util_vhd2raw(int argc, char **argv);
 
 #endif
