@@ -281,45 +281,73 @@ static int _write_without_thread(struct _vhd2raw_ctx *ctx,
 static void _writer_thread(struct _vhd2raw_ctx *ctx)
 {
     struct _read_buffer_list *buf_entry;
+    struct _read_buffer_list *write_ready_head = NULL;
+    struct _read_buffer_list *read_ready_head = NULL;
+    struct _read_buffer_list *read_ready_tail = NULL;
     void *cur_buf;
     int err = 0;
+    int read_ready_num = 0;
 
-    pthread_mutex_lock(&(ctx->thr_lock));
-    while(ctx->write_ready_head || !ctx->done_reading)
+    while(ctx->write_ready_head || 
+          write_ready_head || !ctx->done_reading)
+    for(;;)
     {
-        if (!ctx->write_ready_head)
+        if (write_ready_head != NULL)
         {
-            pthread_cond_wait(&(ctx->thr_wcond), &(ctx->thr_lock));
-            continue;
+            buf_entry = write_ready_head;
         }
-
-        buf_entry = ctx->write_ready_head;
-        ctx->write_ready_head = ctx->write_ready_head->next;
-        if (ctx->write_ready_head == NULL)
+        else
         {
+            pthread_mutex_lock(&(ctx->thr_lock));
+            while ((buf_entry = ctx->write_ready_head) == NULL)
+            {
+                if (ctx->done_reading)
+                {
+                    ctx->write_result = 0;
+                    pthread_mutex_unlock(&(ctx->thr_lock));
+                    return;
+                }
+                pthread_cond_wait(&(ctx->thr_wcond), &(ctx->thr_lock));
+            }
+
+            /* Take ownership of full list */
+            ctx->write_ready_head = NULL;
             ctx->write_ready_tail = NULL;
+
+            pthread_mutex_unlock(&(ctx->thr_lock));
         }
 
-        pthread_mutex_unlock(&(ctx->thr_lock));
+        write_ready_head = buf_entry->next;
 
         err = _write_output(ctx, buf_entry->read_buf,
                             buf_entry->read_bytes);
 
-        buf_entry->next = NULL;
-
-        pthread_mutex_lock(&(ctx->thr_lock));
-
-        if (ctx->read_ready_tail == NULL)
+        buf_entry->next = read_ready_head;
+        read_ready_head = buf_entry;
+        if (read_ready_tail == NULL)
         {
-            ctx->read_ready_head = buf_entry;
+            read_ready_tail = buf_entry;
+        }
+
+        if (++read_ready_num >= (ctx->opts.read_ahead_blocks / 2))
+        {
+            pthread_mutex_lock(&(ctx->thr_lock));
+
+            read_ready_tail->next = ctx->read_ready_head;
+            ctx->read_ready_head = read_ready_head;
+            if (ctx->read_ready_tail == NULL)
+            {
+                ctx->read_ready_tail = read_ready_tail;
+            }
+
+            printf("Signaling reader...\n");
             pthread_cond_signal(&(ctx->thr_rcond));
-        }
-        else
-        {
-            ctx->read_ready_tail->next = buf_entry;
-        }
+            pthread_mutex_unlock(&(ctx->thr_lock));
 
-        ctx->read_ready_tail = buf_entry;
+            read_ready_num = 0;
+            read_ready_head = NULL;
+            read_ready_tail = NULL;
+        }
 
         if (err)
         {
@@ -328,8 +356,6 @@ static void _writer_thread(struct _vhd2raw_ctx *ctx)
     }
 
     ctx->write_result = err;
-
-    pthread_mutex_unlock(&(ctx->thr_lock));
 }
 
 static int _write_with_thread(struct _vhd2raw_ctx *ctx, vhd_context_t *vhd)
@@ -357,7 +383,9 @@ static int _write_with_thread(struct _vhd2raw_ctx *ctx, vhd_context_t *vhd)
         {
             if (num_buffers == ctx->opts.read_ahead_blocks)
             {
+                printf("Waiting for read buffer...\n");
                 pthread_cond_wait(&(ctx->thr_rcond), &(ctx->thr_lock));
+                printf("Reader woken up...\n");
                 continue;
             }
 
@@ -435,7 +463,7 @@ static int _write_with_thread(struct _vhd2raw_ctx *ctx, vhd_context_t *vhd)
 
     return err ? err : ctx->write_result;
 }
-    
+
 #endif
 
 static int _vhd_to_raw(struct _vhd2raw_ctx *ctx)
