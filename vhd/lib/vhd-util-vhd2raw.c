@@ -309,18 +309,17 @@ static void _writer_thread(struct _vhd2raw_ctx *ctx)
 
         pthread_mutex_lock(&(ctx->thr_lock));
 
-        if (ctx->read_ready_tail != NULL)
+        if (ctx->read_ready_tail == NULL)
         {
-            ctx->read_ready_tail->next = buf_entry;
+            ctx->read_ready_head = buf_entry;
+            pthread_cond_signal(&(ctx->thr_rcond));
         }
         else
         {
-            ctx->read_ready_head = buf_entry;
+            ctx->read_ready_tail->next = buf_entry;
         }
 
         ctx->read_ready_tail = buf_entry;
-
-        pthread_cond_signal(&(ctx->thr_rcond));
 
         if (err)
         {
@@ -411,22 +410,24 @@ static int _write_with_thread(struct _vhd2raw_ctx *ctx, vhd_context_t *vhd)
 
         pthread_mutex_lock(&(ctx->thr_lock));
 
-        if (ctx->write_ready_tail != NULL)
+        if (ctx->write_ready_tail == NULL)
         {
-            ctx->write_ready_tail->next = buf_entry;
+            ctx->write_ready_head = buf_entry;
+            pthread_cond_signal(&(ctx->thr_wcond));
         }
         else
         {
-            ctx->write_ready_head = buf_entry;
+            ctx->write_ready_tail->next = buf_entry;
         }
 
         ctx->write_ready_tail = buf_entry;
 
-        pthread_cond_signal(&(ctx->thr_wcond));
     }
 
     ctx->done_reading = 1;
-    pthread_cond_signal(&(ctx->thr_wcond));
+
+    if (ctx->write_ready_head == NULL)
+        pthread_cond_signal(&(ctx->thr_wcond));
 
     pthread_mutex_lock(&(ctx->thr_lock));
 
