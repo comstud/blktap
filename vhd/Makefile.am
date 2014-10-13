@@ -14,3 +14,4 @@ bin_PROGRAMS += vhd-update
 LDADD = lib/libvhd.la
 
 vhd_index_LDADD = lib/libvhd.la -luuid
+vhd_util_LDFLAGS = -static
