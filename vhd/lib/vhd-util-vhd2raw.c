@@ -51,7 +51,7 @@ struct _vhd2raw_ctx {
 
 static void _usage(void)
 {
-	printf("options: [-h] [-b blk_size] [-d] [-f] [-S] [-P] <file.vhd> <output>\n");
+	printf("options: [-h] [-b blk_size] [-d] [-f] [-s] [-P] <file.vhd> <output>\n");
 }
 
 static int _vhd2raw_ctx_init(struct _vhd2raw_ctx *ctx)
@@ -61,7 +61,7 @@ static int _vhd2raw_ctx_init(struct _vhd2raw_ctx *ctx)
     ctx->opts.direct = 0;
     ctx->opts.blk_size = 1024 * 1024;
     ctx->opts.force = 0;
-    ctx->opts.sparse = 1;
+    ctx->opts.sparse = 0;
     ctx->opts.pwrite = 1;
 
     ctx->output_fd = -1;
@@ -142,6 +142,7 @@ static int _write_output(struct _vhd2raw_ctx *ctx, void *read_buf,
         write_bytes = (write_size_left > blk_size) ? blk_size :
                                                      write_size_left;
         if (ctx->opts.sparse &&
+                /* There are more efficient ways to do this */
                 !memcmp(read_buf, ctx->compare_buf, write_bytes))
         {
             ctx->bytes_skipped += write_bytes;
@@ -284,7 +285,7 @@ vhd_util_vhd2raw(int argc, char **argv)
     _vhd2raw_ctx_init(&vhd2raw_ctx);
 
 	optind = 0;
-	while ((c = getopt(argc, argv, "b:dfhSP")) != -1) {
+	while ((c = getopt(argc, argv, "b:dfhsP")) != -1) {
 		switch (c) {
         case 'b':
             vhd2raw_ctx.opts.blk_size = atoi(optarg);
@@ -308,8 +309,8 @@ vhd_util_vhd2raw(int argc, char **argv)
         case 'f':
             vhd2raw_ctx.opts.force = 1;
             break;
-        case 'S':
-            vhd2raw_ctx.opts.sparse = 0;
+        case 's':
+            vhd2raw_ctx.opts.sparse = 1;
             break;
         case 'P':
             vhd2raw_ctx.opts.pwrite = 0;
