@@ -118,11 +118,22 @@ static int _open_output(struct _vhd2raw_ctx *ctx)
         }
     }
 
-    ctx->output_fd = open(ctx->opts.target, oflags, 0600);
-    if (ctx->output_fd < 0)
+    for(;;)
     {
-        err = errno ? errno : EINVAL;
-        return -err;
+        ctx->output_fd = open(ctx->opts.target, oflags, 0600);
+        if (ctx->output_fd >= 0)
+        {
+            break;
+        }
+
+        if (O_DIRECT && (errno == EINVAL) && (oflags & O_DIRECT))
+        {
+            /* Retry without O_DIRECT */
+            oflags &= ~O_DIRECT;
+            continue;
+        }
+
+        return errno ? -errno : -EINVAL;
     }
 
     return 0;
