@@ -232,17 +232,7 @@ static int _vhd_to_raw(struct _vhd2raw_ctx *ctx)
                    VHD_OPEN_RDONLY | VHD_OPEN_IGNORE_DISABLED);
     if (err)
     {
-        if (err == -EINVAL)
-        {
-            err = vhd_open(&vhd, ctx->opts.source,
-                           VHD_OPEN_RDONLY | VHD_OPEN_IGNORE_DISABLED |
-                           VHD_OPEN_CACHED);
-        }
-
-        if (err)
-        {
-            return err;
-        }
+        return err;
     }
 
     if ((err = _open_output(ctx)) < 0)

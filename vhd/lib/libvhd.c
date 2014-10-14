@@ -2524,11 +2524,20 @@ vhd_open(vhd_context_t *ctx, const char *file, int flags)
 	if (flags & VHD_OPEN_RDWR)
 		oflags |= O_RDWR;
 
-	ctx->fd = open(ctx->file, oflags, 0644);
-	if (ctx->fd == -1) {
+    for(;;)
+    {
+    	ctx->fd = open(ctx->file, oflags, 0644);
+        if (ctx->fd >= 0) {
+            break;
+        }
+        if (O_DIRECT && (errno == EINVAL) && (oflags & O_DIRECT)) {
+            /* try to re-open without O_DIRECT */
+            oflags &= ~O_DIRECT;
+            continue;
+        }
 		err = -errno;
-		VHDLOG("failed to open %s: %d\n", ctx->file, err);
-		goto fail;
+        VHDLOG("failed to open %s: %d\n", ctx->file, err);
+        goto fail;
 	}
 
 	err = vhd_test_file_fixed(ctx->file, &ctx->is_block);
